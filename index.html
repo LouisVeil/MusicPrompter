@@ -536,20 +536,38 @@
       
       rawLines.forEach(function(ln) {
         if (ln.toLowerCase().startsWith("{tempo:")) {
-          // Extract the raw string inside the curly braces
           var rawValue = ln.replace(/\{tempo:\s*/i, "").replace(/\}/, "").trim();
-          
-          // FIXED: Uses a regex match to extract strictly the digits, ignoring letters like "bpm"
           var digitMatch = rawValue.match(/\d+/);
           if (digitMatch) {
-            var extractedTempo = parseInt(digitMatch[0]);
+            var extractedTempo = parseInt(digitMatch);
             if (!isNaN(extractedTempo)) foundTempo = extractedTempo;
           }
         }
       });
       
-      // Update the metronome box on your top panel row instantly
       document.getElementById('metro-bpm').value = foundTempo;
+
+      // =========================================================================
+      // 🆕 AUTO-SET SCROLL SPEED FROM NATIVE PROTOCOL DIRECTIVE
+      // =========================================================================
+      var foundScrollSpeed = 0.2; // Fallback baseline if no directive tag is found
+      
+      rawLines.forEach(function(ln) {
+        if (ln.toLowerCase().startsWith("{scrollspeed:")) {
+          // Extract the raw string inside the curly braces
+          var rawSpeedVal = ln.replace(/\{scrollspeed:\s*/i, "").replace(/\}/, "").trim();
+          
+          // Extracts strictly digits and decimal points (handles configurations like "0.3" or "1.5")
+          var floatMatch = rawSpeedVal.match(/[\d.]+/);
+          if (floatMatch) {
+            var extractedSpeed = parseFloat(floatMatch[0]);
+            if (!isNaN(extractedSpeed)) foundScrollSpeed = extractedSpeed;
+          }
+        }
+      });
+
+      // Populate your top panel numeric configuration box immediately
+      document.getElementById('scroll-speed').value = foundScrollSpeed;
     }
 
 
