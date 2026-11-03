@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🎵 Studio Pro Teleprompter</title>
+  <style>
+    :root {
+      --bg-main: #121212;
+      --bg-panel: #1a1a1a;
+      --border-color: #2d2d2d;
+      --text-main: #e0e0e0;
+      --text-bright: #ffffff;
+      --chord-color: #4fc3f7;
+      --para-color: #ffb74d;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-main);
+      color: var(--text-main);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    /* Navigation Sidebar */
+    #sidebar {
+      width: 260px;
+      background: var(--bg-panel);
+      border-right: 2px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 1100;
+    }
+    .sidebar-header {
+      padding: 15px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .file-label {
+      display: block;
+      background: #1155cc;
+      color: #fff;
+      text-align: center;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .file-label:hover { background: #1a66ff; }
+    #song-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+      margin: 0;
+      padding: 10px;
+    }
+    /* Song Row: Using flexbox with hidden overflow to give text priority */
+    #song-list li {
+      padding: 8px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.02);
+      gap: 10px;
+    }
+    #song-list li:hover { background: #2d2d2d; }
+    #song-list li.active { background: #1155cc; color: #fff; font-weight: bold; }
+    
+    .song-item-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding-right: 5px;
+    }
+    
+    /* COMPACT CONTROLS: Hidden by default, floats into view on hover */
+    .song-controls {
+      display: none;
+      gap: 2px;
+    }
+    #song-list li:hover .song-controls, #song-list li.active .song-controls {
+      display: flex; 
+    }
+    .control-btn {
+      background: #252525;
+      color: #ccc;
+      border: 1px solid #3a3a3a;
+      border-radius: 3px;
+      padding: 2px 4px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .control-btn:hover { background: #444; color: #fff; }
+    .control-btn.edit { color: #ffb74d; }
+    .control-btn.save-disk { color: #666; cursor: not-allowed; opacity: 0.3; }
+    .control-btn.save-disk.active { background: #1155cc; color: #fff; cursor: pointer; opacity: 1; }
+    .control-btn.save-disk.active:hover { background: #1a66ff; }
+    .control-btn.del:hover { background: #cc1111; color: #fff; }
+    
+    /* Main Content Area */
+    #main-canvas {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      height: 100%;
+    }
+    #control-panel {
+      height: 70px;
+      background: var(--bg-panel);
+      border-bottom: 2px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .btn {
+      background: #2d2d2d;
+      color: var(--text-bright);
+      border: 1px solid var(--border-color);
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn.play { background: #1155cc; border: none; }
+    .btn.play:hover { background: #1a66ff; }
+    .btn.stop { background: #cc1111; border: none; }
+    .btn.stop:hover { background: #ff2222; }
+    .control-group { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    input[type="number"] {
+      background: #2d2d2d;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 60px;
+      text-align: center;
+    }
+    
+    /* Document Display Viewport */
+    #viewport {
+      flex: 1;
+      overflow-y: auto;
+      padding: 30px 50px 400px 50px;
+    }
+    #prompter-stage {
+      max-width: 850px;
+      margin: 0 auto;
+    }
+    #welcome-message {
+      text-align: center;
+      margin-top: 100px;
+      color: #666;
+    }
+    
+    /* Song Sheet Formatting Protocol Rules */
+    .song-title { text-align: center; font-size: 26pt; font-weight: bold; color: var(--text-bright); margin-bottom: 5px; }
+    .song-subtitle { text-align: center; font-size: 16pt; color: #aaa; margin-bottom: 25px; }
+    .meta-line { font-size: 12pt; margin-bottom: 6px; color: #bbb; }
+    .empty-space { height: 25px; }
+    .song-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    .para-cell { vertical-align: top; font-size: 13pt; font-weight: bold; color: var(--para-color); padding-top: 18px; padding-right: 15px; }
+    .content-cell { vertical-align: top; }
+    .line-container { margin-top: 5px; margin-bottom: 5px; line-height: 1.2; }
+    .chord-row { font-weight: bold; color: var(--chord-color); min-height: 18px; }
+    .lyrics-row { font-weight: bold; color: var(--text-bright); min-height: 22px; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Left Batch File Explorer Panel -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+ <!--     <input type="file" id="directory-picker" accept=".txt" multiple style="display: none;" onchange="loadFolderSongs(event)">-->
+      <input type="file" id="directory-picker" accept=".txt,text/plain" multiple style="display: none;" onchange="loadFolderSongs(event)">
+      <label for="directory-picker" class="file-label">📂 Load Songs Directory</label>
+      <button class="btn" style="width: 100%; margin-top: 10px; background: #333; font-size: 12px; padding: 6px;" onclick="clearEntirePlaylist()">🗑️ Clear Playlist</button>
+      <!-- SAVE / LOAD PLAYLIST EXPORT OVERLAYS -->
+      <div style="display: flex; gap: 6px; margin-top: 6px;">
+        <button class="btn" style="flex: 1; background: #2d2d2d; font-size: 11px; padding: 6px;" onclick="exportPlaylistFile()">💾 Export Setlist</button>
+<!--        <input type="file" id="playlist-loader" accept=".json" style="display: none;" onchange="importPlaylistFile(event)">-->
+        <input type="file" id="playlist-loader" accept=".json,application/json" style="display: none;" onchange="importPlaylistFile(event)">
+        <button class="btn" style="flex: 1; background: #2d2d2d; font-size: 11px; padding: 6px;" onclick="document.getElementById('playlist-loader').click()">📂 Load Setlist</button>
+      </div>
+    </div>
+    <ul id="song-list">
+      <div style="color: #555; text-align: center; font-size: 13px; margin-top: 20px;">No songs loaded yet.</div>
+    </ul>
+  </div>
+
+  <!-- Performance Workspace Display Viewport -->
+  <div id="main-canvas">
+    <div id="control-panel">
+      <button class="btn play" id="play-btn" onclick="toggleScroll()">▶ Play</button>
+      <div class="control-group">
+        <label>Scroll Speed:</label>
+        <input type="number" id="scroll-speed" value="1" min="0.1" step="0.1">
+      </div>
+<!--  METRONOME WIDGET BLOCK -->
+    <div style="border-left: 1px solid #444; height: 35px; margin: 0 5px;"></div>
+    <div class="control-group">
+      <button class="btn" id="metro-btn" onclick="toggleMetronome()" style="background: #222; border-color: #444;">⏱️ Start</button>
+      <input type="number" id="metro-bpm" value="120" min="30" max="300" style="width: 55px;" onchange="updateMetronomeTempo()">
+      <span style="font-size: 11px; color: #888;">BPM</span>
+      <button class="btn" style="padding: 5px 10px; font-size: 11px;" onclick="adjustBPM(-5)">-5</button>
+      <button class="btn" style="padding: 5px 10px; font-size: 11px;" onclick="adjustBPM(5)">+5</button>
+      <!-- The Pulse Visual Flash Indicator Box -->
+      <div id="metro-visual" style="width: 24px; height: 24px; background: #333; border-radius: 4px; transition: background 0.05s ease;"></div>
+      <!-- Audio Toggle -->
+      <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+        <input type="checkbox" id="metro-audio-toggle"> 🔊 Sound
+      </label>
+    </div>
+
+      <button class="btn" style="margin-left: auto;" onclick="adjustTextSize(1)">A+</button>
+      <button class="btn" onclick="adjustTextSize(-1)">A-</button>
+    </div>
+
+    <div id="viewport">
+      <div id="prompter-stage">
+        <div id="welcome-message">
+          <h2>Ready to Jam?</h2>
+          <p>Click "Load Songs Directory" at the top left, select one or multiple song text sheets from your laptop, and they will populate your playlist menu instantly.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    var loadedSongsMap = {};
+    var playlistOrder = []; 
+    var activeSongName = null; 
+    var scrollInterval = null;
+    var isScrolling = false;
+    var globalSizeModifier = 0; 
+    
+    // NEW STATUS TRACKER: Keeps tabs on which songs have unsaved edits
+    var modifiedSongsStatus = {}; 
+
+    // Tracks if the current session was launched from a master .json setlist file
+    var activeSetlistHandleName = null; 
+
+    // METRONOME STATE TRACKING VARIABLES
+    var metroInterval = null;
+    var isMetroRunning = false;
+    var metroBeatCounter = 0;
+    var audioCtx = null; // High-precision Web Audio engine context tracker
+
+
+    // AUTOMATIC LOCAL STORAGE CACHE INITIALIZATION
+    window.addEventListener('DOMContentLoaded', function() {
+      var cachedOrder = localStorage.getItem('prompter_playlist_order');
+      var cachedSongs = localStorage.getItem('prompter_songs_map');
+      var cachedStatus = localStorage.getItem('prompter_modified_status');
+      
+      // NEW TRACKER: Pulls the active setlist name out of cache memory on page refresh
+      var cachedSetName = localStorage.getItem('prompter_active_setlist_name');
+      
+      if (cachedOrder && cachedSongs) {
+        playlistOrder = JSON.parse(cachedOrder);
+        loadedSongsMap = JSON.parse(cachedSongs);
+        if (cachedStatus) modifiedSongsStatus = JSON.parse(cachedStatus);
+        
+        // FIXED: Restores your setlist's name into the tracking variable seamlessly
+        if (cachedSetName) activeSetlistHandleName = cachedSetName;
+        
+        renderPlaylist();
+      }
+    });
+
+    // MASTER ENGINE CACHE TRIGGER
+    function saveAppStateToCache() {
+      localStorage.setItem('prompter_playlist_order', JSON.stringify(playlistOrder));
+      localStorage.setItem('prompter_songs_map', JSON.stringify(loadedSongsMap));
+      localStorage.setItem('prompter_modified_status', JSON.stringify(modifiedSongsStatus));
+      localStorage.setItem('prompter_active_setlist_name', activeSetlistHandleName || "");
+    }
+
+    function loadFolderSongs(event) {
+      if (!event || !event.target || !event.target.files) return;
+      var files = event.target.files;
+      if (!files.length) return;
+
+      for (var i = 0; i < files.length; i++) {
+        (function(file) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var cleanName = file.name.replace(/\.txt$/i, "");
+            loadedSongsMap[cleanName] = e.target.result;
+            
+            if (!(cleanName in modifiedSongsStatus)) {
+              modifiedSongsStatus[cleanName] = false;
+            }
+            if (playlistOrder.indexOf(cleanName) === -1) {
+              playlistOrder.push(cleanName);
+            }
+            renderPlaylist();
+            saveAppStateToCache();
+          };
+          reader.readAsText(file); // FIXED: Passing the single isolated file to reader loop
+        })(files[i]);
+      }
+      event.target.value = ""; 
+    }
+
+    function renderPlaylist() {
+      var listContainer = document.getElementById('song-list');
+      listContainer.innerHTML = '';
+
+      if (playlistOrder.length === 0) {
+        listContainer.innerHTML = '<div style="color: #555; text-align: center; font-size: 13px; margin-top: 20px;">No songs loaded yet.</div>';
+        return;
+      }
+
+      playlistOrder.forEach(function(songName, index) {
+        var li = document.createElement('li');
+        if (songName === activeSongName) li.className = 'active';
+
+        var textSpan = document.createElement('span');
+        textSpan.className = 'song-item-text';
+        textSpan.innerText = songName;
+        textSpan.onclick = function() { selectSong(songName); };
+        li.appendChild(textSpan);
+
+        var controlsDiv = document.createElement('div');
+        controlsDiv.className = 'song-controls';
+
+        // 1. Move Up Button
+        var upBtn = document.createElement('button');
+        upBtn.className = 'control-btn';
+        upBtn.innerText = '▲';
+        upBtn.onclick = function() { moveSong(index, -1); };
+        controlsDiv.appendChild(upBtn);
+
+        // 2. Move Down Button
+        var downBtn = document.createElement('button');
+        downBtn.className = 'control-btn';
+        downBtn.innerText = '▼';
+        downBtn.onclick = function() { moveSong(index, 1); };
+        controlsDiv.appendChild(downBtn);
+
+        // 3. Edit Pencil Button
+        var editBtn = document.createElement('button');
+        editBtn.className = 'control-btn edit';
+        editBtn.innerText = '✏️';
+        editBtn.onclick = function() { toggleEditSongMode(songName); };
+        controlsDiv.appendChild(editBtn);
+
+        // 4. DYNAMIC FLOPPY DISK BUTTON (Saves to Laptop)
+        var saveBtn = document.createElement('button');
+        saveBtn.className = 'control-btn save-disk';
+        saveBtn.innerText = '💾';
+        
+        // Evaluates if the specific track has been modified to switch states
+        if (modifiedSongsStatus[songName] === true) {
+          saveBtn.className += ' active';
+          saveBtn.onclick = function() { exportAndOverrideLaptopFile(songName); };
+        } else {
+          saveBtn.onclick = function() { alert("No changes detected to write for: " + songName); };
+        }
+        controlsDiv.appendChild(saveBtn);
+
+        // 5. Remove Button
+        var delBtn = document.createElement('button');
+        delBtn.className = 'control-btn del';
+        delBtn.innerText = '✕';
+        delBtn.onclick = function() { removeSong(index, songName); };
+        controlsDiv.appendChild(delBtn);
+
+        li.appendChild(controlsDiv);
+        listContainer.appendChild(li);
+      });
+    }
+
+    //LOAD THE EDITOR FIELD FRAMEWORK
+    function toggleEditSongMode(songName) {
+      if (isScrolling) toggleScroll();
+      activeSongName = songName;
+      renderPlaylist();
+
+      var currentRawText = loadedSongsMap[songName] || "";
+      var stage = document.getElementById('prompter-stage');
+
+      // 1. Clear out the workspace container safely
+      stage.innerHTML = "";
+
+      // 2. Build the structural interface headers
+      var header = document.createElement("h2");
+      header.style.marginTop = "0";
+      header.innerText = "Editing: " + songName;
+      stage.appendChild(header);
+
+      // 3. Build the text workspace box (safely handles any text format natively)
+      var textarea = document.createElement("textarea");
+      textarea.id = "edit-box";
+      textarea.value = currentRawText; // Safe value placement prevents syntax string crashes
+      textarea.style.width = "100%";
+      textarea.style.height = "350px";
+      textarea.style.background = "#1a1a1a";
+      textarea.style.color = "#fff";
+      textarea.style.fontFamily = "monospace";
+      textarea.style.padding = "15px";
+      textarea.style.border = "1px solid #444";
+      textarea.style.borderRadius = "4px";
+      textarea.style.boxSizing = "border-box";
+      textarea.style.marginBottom = "15px";
+      stage.appendChild(textarea);
+      stage.appendChild(document.createElement("br"));
+
+      // 4. Build the Update Button element
+      var updateBtn = document.createElement("button");
+      updateBtn.className = "btn";
+      updateBtn.style.background = "#1155cc";
+      updateBtn.style.marginRight = "10px";
+      updateBtn.innerText = "✏️ Update & Render View";
+      updateBtn.onclick = function() { updateAndRenderViewOnly(songName); };
+      stage.appendChild(updateBtn);
+
+      // 5. Build the Cancel Button element
+      var cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn";
+      cancelBtn.style.background = "#444";
+      cancelBtn.innerText = "Cancel";
+      cancelBtn.onclick = function() { selectSong(songName); };
+      stage.appendChild(cancelBtn);
+    }
+
+    // UPDATED SUBMIT STEP 1: Syncs text modifications into cache memory
+    function updateAndRenderViewOnly(songName) {
+      var editedContent = document.getElementById('edit-box').value;
+      
+      loadedSongsMap[songName] = editedContent;
+      modifiedSongsStatus[songName] = true; 
+      
+      selectSong(songName);
+      saveAppStateToCache(); // Locks changes to cache instantly
+    }
+
+    async function exportAndOverrideLaptopFile(songName) {
+      var fileContentToSave = loadedSongsMap[songName];
+      if (!fileContentToSave) return;
+
+      try {
+        var options = {
+          suggestedName: songName + '.txt',
+          types: [{
+            description: 'Plain Text File',
+            accept: { 'text/plain': ['.txt'] }
+          }]
+        };
+        
+        var fileHandle = await window.showSaveFilePicker(options);
+        var writableStream = await fileHandle.createWritable();
+        
+        await writableStream.write(fileContentToSave);
+        await writableStream.close();
+        
+        // Success: Clear individual track flag
+        modifiedSongsStatus[songName] = false;
+        activeSongName = songName;
+        renderPlaylist();
+        
+        var rawLines = fileContentToSave.split(/\r?\n/).map(function(ln) { return ln.trim(); });
+        document.getElementById('prompter-stage').innerHTML = compileMarkupToHTML(rawLines);
+        
+        saveAppStateToCache(); 
+
+        // SMART SETLIST AUTO-UPDATE PROMPT
+        if (activeSetlistHandleName) {
+          setTimeout(function() {
+            var confirmSetlistSave = confirm(
+              "Setlist Active: Would you also like to update and overwrite '" + 
+              activeSetlistHandleName + "' with all current modifications and new songs?"
+            );
+            if (confirmSetlistSave) {
+              exportPlaylistFile();
+            }
+          }, 400);
+        }
+
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          alert("Error overwriting hard drive file: " + err.toString());
+        }
+      }
+    }
+
+    function moveSong(index, direction) {
+      var targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= playlistOrder.length) return;
+      var temp = playlistOrder[index];
+      playlistOrder[index] = playlistOrder[targetIndex];
+      playlistOrder[targetIndex] = temp;
+      renderPlaylist();
+    }
+
+    function removeSong(index, songName) {
+      playlistOrder.splice(index, 1);
+      delete modifiedSongsStatus[songName];
+      if (activeSongName === songName) {
+        if (isScrolling) toggleScroll();
+        activeSongName = null;
+        document.getElementById('prompter-stage').innerHTML = 
+          "<div id='welcome-message'><h2>Ready to Jam?</h2><p>Select a song from your playlist sidebar to load it onto the stage view.</p></div>";
+      }
+      renderPlaylist();
+    }
+
+    function selectSong(songName) {
+      if (isScrolling) toggleScroll();
+      activeSongName = songName;
+      renderPlaylist(); 
+
+      var rawMarkupText = loadedSongsMap[songName];
+      var rawLines = rawMarkupText.split(/\r?\n/).map(function(ln) { return ln.trim(); });
+      
+      document.getElementById('prompter-stage').innerHTML = compileMarkupToHTML(rawLines);
+      document.getElementById('viewport').scrollTo(0, 0);
+
+      // =========================================================================
+      // SET METRONOME TO MATCH NATIVE SONG TEMPO DIRECTIVE OR DEFAULT TO 90
+      // =========================================================================
+      var foundTempo = 90; // Fallback default if no tag is present
+      
+      rawLines.forEach(function(ln) {
+        if (ln.toLowerCase().startsWith("{tempo:")) {
+          // Extract the raw string inside the curly braces
+          var rawValue = ln.replace(/\{tempo:\s*/i, "").replace(/\}/, "").trim();
+          
+          // FIXED: Uses a regex match to extract strictly the digits, ignoring letters like "bpm"
+          var digitMatch = rawValue.match(/\d+/);
+          if (digitMatch) {
+            var extractedTempo = parseInt(digitMatch[0]);
+            if (!isNaN(extractedTempo)) foundTempo = extractedTempo;
+          }
+        }
+      });
+      
+      // Update the metronome box on your top panel row instantly
+      document.getElementById('metro-bpm').value = foundTempo;
+    }
+
+
+
+    // SMOOTH ACCUMULATIVE FRACTIONAL SCROLL ENGINE
+    function toggleScroll() {
+      var btn = document.getElementById('play-btn');
+      var viewport = document.getElementById('viewport');
+      
+      if (isScrolling) {
+        clearInterval(scrollInterval);
+        btn.innerText = "▶ Play";
+        btn.className = "btn play";
+        isScrolling = false;
+      } else {
+        var speedInput = document.getElementById('scroll-speed');
+        var speed = parseFloat(speedInput.value) || 1;
+        
+        // High-precision background accumulator coordinates
+        var exactPositionTracker = viewport.scrollTop;
+        
+        scrollInterval = setInterval(function() {
+          // 1. Add the raw fractional speed to our precise float counter
+          exactPositionTracker += speed;
+          
+          // 2. Extract only the whole completed integer pixels
+          var wholePixelsToMove = Math.floor(exactPositionTracker) - viewport.scrollTop;
+          
+          if (wholePixelsToMove >= 1) {
+            viewport.scrollBy(0, wholePixelsToMove);
+          }
+        }, 16.67); // Stable 60 Frames Per Second calculation grid
+        
+        btn.innerText = "❚❚ Pause";
+        btn.className = "btn stop";
+        isScrolling = true;
+      }
+    }
+
+    function adjustTextSize(direction) {
+      globalSizeModifier += direction;
+      var activeRows = document.querySelectorAll('.chord-row, .lyrics-row, .para-cell');
+      activeRows.forEach(function(row) {
+        var currentSize = parseFloat(window.getComputedStyle(row).fontSize);
+        row.style.fontSize = (currentSize + direction) + 'px';
+      });
+    }
+
+   // UPDATED PLAYLIST WIPE ENGINE: Clears both memory and persistent storage cache
+    function clearEntirePlaylist() {
+      if (playlistOrder.length === 0) return;
+      
+      if (confirm("Are you sure you want to clear your entire playlist?")) {
+        if (isScrolling) toggleScroll();
+        
+        loadedSongsMap = {};
+        playlistOrder = [];
+        activeSongName = null;
+        modifiedSongsStatus = {};
+        activeSetlistHandleName = null; // Clears the active setlist tracking state layout cleanly
+        
+        localStorage.clear(); // Empties persistent storage cache completely
+        
+        document.getElementById('prompter-stage').innerHTML = 
+          "<div id='welcome-message'>" +
+            "<h2>Ready to Jam?</h2>" +
+            "<p>Click \"Load Songs Directory\" at the top left, select one or multiple song text sheets from your laptop, and they will populate your playlist menu instantly.</p>" +
+          "</div>";
+          
+        renderPlaylist();
+      }
+    }
+
+    function parseLyricsLine(line, lSize, cSize, fontName) {
+      var cLine = "", lLine = "", reg = /\[([^\]]+)\]/g, m, idx = 0;
+      var hasTxt = line.replace(/\[[^\]]+\]/g, '').trim().length > 0;
+
+      if (!hasTxt) {
+        var cl = line.replace(/\[/g, ' ').replace(/\]/g, ' ').replace(/ /g, '&nbsp;');
+        return "<div style='font-family:\"" + fontName + "\",monospace; font-size:" + (cSize + globalSizeModifier) + "pt; font-weight:bold; color:var(--chord-color);'>" + cl + "</div>";
+      }
+
+      while ((m = reg.exec(line)) !== null) {
+        lLine += line.substring(idx, m.index);
+        while (cLine.length < lLine.length) cLine += " ";
+        cLine += m[1]; // FIXED: Extracts strictly the inner text group ("Am" instead of "[Am]")
+        idx = reg.lastIndex;
+      }
+      lLine += line.substring(idx);
+
+      var fixedChordHtml = "";
+      var insideChordBlock = false;
+
+      for (var i = 0; i < cLine.length; i++) {
+        var charAtPos = cLine[i];
+        if (charAtPos === " ") {
+          if (insideChordBlock) { fixedChordHtml += "</span>"; insideChordBlock = false; }
+          fixedChordHtml += "&nbsp;"; 
+        } else {
+          if (!insideChordBlock) { fixedChordHtml += "<span style='font-size:" + (cSize + globalSizeModifier) + "pt; font-weight:bold; color:var(--chord-color);'>"; insideChordBlock = true; }
+          fixedChordHtml += charAtPos;
+        }
+      }
+      if (insideChordBlock) fixedChordHtml += "</span>";
+
+      var fixedLyricsHtml = lLine.replace(/ /g, '&nbsp;');
+
+      return "<div class='line-container'>" +
+             "<div class='chord-row' style='font-family:\"" + fontName + "\",monospace; font-size:" + (lSize + globalSizeModifier) + "pt; min-height:" + (cSize * 1.2) + "px;'>" + fixedChordHtml + "</div>" +
+             "<div class='lyrics-row' style='font-family:\"" + fontName + "\",monospace; font-size:" + (lSize + globalSizeModifier) + "pt; min-height:" + (lSize * 1.2) + "px;'>" + fixedLyricsHtml + "</div></div>";
+    }
+
+
+    function compileMarkupToHTML(lines) {
+      var lSz = 18, cSz = 14, lp = 12, rp = 88; 
+      var fontFm = "Roboto Mono"; 
+      var isTab = false, html = "", comp = [];
+
+      for (var i = 0; i < lines.length; i++) {
+        var cur = lines[i];
+        if (cur.toLowerCase().startsWith("{merge}") && comp.length > 0) {
+          var textToAppend = cur.substring(7).trim(); 
+          comp[comp.length - 1] = comp[comp.length - 1] + " " + textToAppend;
+          continue;
+        }
+        comp.push(cur);
+      }
+
+      comp.forEach(function(ln) {
+        if (ln.startsWith("{") && ln.endsWith("}")) {
+          var d = ln.substring(1, ln.length - 1).trim();
+          var cIdx = d.indexOf(":");
+          var k = cIdx !== -1 ? d.substring(0, cIdx).trim().toLowerCase() : d.toLowerCase();
+          var v = cIdx !== -1 ? d.substring(cIdx + 1).trim() : "";
+
+          if (k === "title") {
+            html += "<div class='song-title'>" + v + "</div>";
+          } else if (k === "subtitle") {
+            html += "<div class='song-subtitle'>" + v + "</div>";
+          } else if (k === "lyricssize") {
+            lSz = parseFloat(v) || 18;
+          } else if (k === "chordssize") {
+            cSz = parseFloat(v) || 14;
+          } else if (k === "lyricschordsfont") {
+            fontFm = v || "Roboto Mono"; 
+          } else if (k === "parasplit") {
+            var sp = v.split(/\s+/).map(Number);
+            if (sp.length === 2 && !isNaN(sp)) { lp = sp; rp = sp; } 
+          } else if (k === "para") {
+            if (isTab) { html += "</td></tr>"; } else { html += "<table class='song-table'>"; isTab = true; }
+            html += "<tr><td class='para-cell' style='width:" + lp + "%;'>" + v + "</td><td class='content-cell' style='width:" + rp + "%;'>";
+          } else if (k === "empty") {
+            html += "<div class='empty-space' style='height:" + (lSz * 1.5) + "px;'></div>";
+          } else if (k === "split") {
+            html += "<div style='clear:both;'></div>";
+          } else if (k !== "chorddef" && k !== "chordpos") {
+            html += "<div class='meta-line'><b>" + (k.charAt(0).toUpperCase() + k.slice(1)) + ":</b> " + v + "</div>";
+          }
+        } else {
+          var hLn = parseLyricsLine(ln, lSz, cSz, fontFm);
+          html += isTab ? hLn : "<div style='margin-left:" + lp + "%;'>" + hLn + "</div>";
+        }
+      });
+
+      if (isTab) html += "</td></tr></table>";
+      return html;
+    }
+
+    window.addEventListener('keydown', function(event) {
+      var activeTag = document.activeElement.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return; 
+
+      var speedInput = document.getElementById('scroll-speed');
+      var currentSpeed = parseFloat(speedInput.value) || 1;
+      var viewport = document.getElementById('viewport');
+
+      switch(event.code) {
+        case 'Space':
+          event.preventDefault();
+          toggleScroll(); 
+          break;
+          
+        case 'ArrowUp':
+          event.preventDefault();
+          var newSpeedUp = (currentSpeed + 0.2).toFixed(1);
+          speedInput.value = newSpeedUp;
+          if (isScrolling) {
+            clearInterval(scrollInterval);
+            scrollInterval = setInterval(function() { viewport.scrollBy(0, parseFloat(newSpeedUp)); }, 16.67);
+          }
+          break;
+          
+        case 'ArrowDown':
+          event.preventDefault();
+          var newSpeedDown = Math.max(0.1, currentSpeed - 0.2).toFixed(1);
+          speedInput.value = newSpeedDown;
+          if (isScrolling) {
+            clearInterval(scrollInterval);
+            scrollInterval = setInterval(function() { viewport.scrollBy(0, parseFloat(newSpeedDown)); }, 16.67);
+          }
+          break;
+
+        case 'ArrowRight':
+          event.preventDefault();
+          viewport.scrollBy(0, 150); 
+          break;
+
+        case 'ArrowLeft':
+          event.preventDefault();
+          viewport.scrollBy(0, -150); 
+          break;
+      }
+    });
+
+    // METRONOME AUDIO & VISUAL ENGINE
+    function toggleMetronome() {
+      var btn = document.getElementById('metro-btn');
+      if (isMetroRunning) {
+        clearInterval(metroInterval);
+        isMetroRunning = false;
+        btn.innerText = "⏱️ Start";
+        btn.style.background = "#222";
+        document.getElementById('metro-visual').style.background = "#333";
+      } else {
+        isMetroRunning = true;
+        btn.innerText = "⏱️ Stop";
+        btn.style.background = "#cc1111";
+        metroBeatCounter = 0;
+        runMetronomeTickerLoop();
+      }
+    }
+
+    function updateMetronomeTempo() {
+      if (isMetroRunning) {
+        // If running, cycle the background interval immediately to register the new speed
+        clearInterval(metroInterval);
+        runMetronomeTickerLoop();
+      }
+    }
+
+    function adjustBPM(amount) {
+      var bpmInput = document.getElementById('metro-bpm');
+      var currentBPM = parseInt(bpmInput.value) || 120;
+      var newBPM = Math.min(300, Math.max(30, currentBPM + amount));
+      bpmInput.value = newBPM;
+      updateMetronomeTempo();
+    }
+
+    function runMetronomeTickerLoop() {
+      var bpm = parseInt(document.getElementById('metro-bpm').value) || 120;
+      // Formula to convert Beats Per Minute into exact millisecond frame delays
+      var intervalMs = (60 / bpm) * 1000;
+
+      // Fire the first beat immediately on start click
+      executeSingleMetronomeBeat();
+
+      metroInterval = setInterval(function() {
+        executeSingleMetronomeBeat();
+      }, intervalMs);
+    }
+
+    function executeSingleMetronomeBeat() {
+      var visualBox = document.getElementById('metro-visual');
+      var soundEnabled = document.getElementById('metro-audio-toggle').checked;
+      
+      metroBeatCounter++;
+      // Standard 4/4 time signature tracking setup loop
+      if (metroBeatCounter > 4) metroBeatCounter = 1;
+
+      // 1. VISUAL PULSE ACCENT PROFILES
+      if (metroBeatCounter === 1) {
+        visualBox.style.background = "#ff3333"; // Bright Red flash on Downbeat (Beat 1)
+      } else {
+        visualBox.style.background = "#ffb74d"; // Amber flash on weak beats (Beats 2, 3, 4)
+      }
+
+      // Quick decay reset animation handler to turn the light off after 100ms
+      setTimeout(function() {
+        if (isMetroRunning) visualBox.style.background = "#222";
+      }, 100);
+
+      // 2. AUDIO SYNTHESIS CLICK CONTROLLER (Web Audio API Node generation)
+      if (soundEnabled) {
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          // Accentuate the audio sound pitch on Beat 1 to provide acoustic tracking depth
+          if (metroBeatCounter === 1) {
+            osc.frequency.setValueAtTime(1000, audioCtx.currentTime); // High pitch click
+          } else {
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);  // Low pitch click
+          }
+          
+          // Generate a sudden envelope click strike with zero signal decay hum tail
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+          
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.06);
+        } catch (e) {
+          console.log("Audio Engine context delayed or blocked: " + e);
+        }
+      }
+    }
+
+    // SETLIST PLAYLIST SAVE / LOAD JSON FILE MANAGERS
+    async function exportAndOverrideLaptopFile(songName) {
+      var fileContentToSave = loadedSongsMap[songName];
+      if (!fileContentToSave) return;
+
+      try {
+        var options = {
+          suggestedName: songName + '.txt',
+          types: [{
+            description: 'Plain Text File',
+            accept: { 'text/plain': ['.txt'] }
+          }]
+        };
+        
+        var fileHandle = await window.showSaveFilePicker(options);
+        var writableStream = await fileHandle.createWritable();
+        
+        await writableStream.write(fileContentToSave);
+        await writableStream.close();
+        
+        // Success: Clear individual track flag
+        modifiedSongsStatus[songName] = false;
+        activeSongName = songName;
+        renderPlaylist();
+        
+        var rawLines = fileContentToSave.split(/\r?\n/).map(function(ln) { return ln.trim(); });
+        document.getElementById('prompter-stage').innerHTML = compileMarkupToHTML(rawLines);
+        
+        saveAppStateToCache(); 
+
+        // =========================================================================
+        // FIXED USER GESTURE PROMPT BYPASS
+        // =========================================================================
+        if (activeSetlistHandleName) {
+          setTimeout(function() {
+            alert(
+              "Song saved! Your master setlist '" + activeSetlistHandleName + 
+              "' now has unsaved modifications. Remember to click '💾 Export Setlist' " +
+              "in your sidebar before closing to lock in your additions permanently."
+            );
+          }, 200);
+        }
+
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          alert("Error overwriting hard drive file: " + err.toString());
+        }
+      }
+    }
+
+    function importPlaylistFile(event) {
+      if (!event || !event.target || !event.target.files) return;
+      var files = event.target.files;
+      if (!files.length) return;
+
+      var file = files[0]; // FIXED: Extracting the absolute target file node object
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          var parsedPackage = JSON.parse(e.target.result);
+          
+          if (parsedPackage.playlistOrder && parsedPackage.loadedSongsMap) {
+            playlistOrder = parsedPackage.playlistOrder;
+            loadedSongsMap = parsedPackage.loadedSongsMap;
+            modifiedSongsStatus = parsedPackage.modifiedSongsStatus || {};
+            
+            activeSetlistHandleName = file.name;
+            activeSongName = playlistOrder.length > 0 ? playlistOrder[0] : null; // FIXED: Target index array correctly
+            
+            renderPlaylist();
+            saveAppStateToCache();
+            
+            if (activeSongName) {
+              selectSong(activeSongName);
+            }
+            alert("Setlist '" + activeSetlistHandleName + "' loaded successfully!");
+          } else {
+            alert("Error: Missing structural configurations inside this setlist file format.");
+          }
+        } catch (err) {
+          alert("Error decoding file contents: " + err.toString());
+        }
+      };
+      reader.readAsText(file); // FIXED: Universally accessible text conversion stream
+      event.target.value = ""; 
+    }
+
+  </script>
+</body>
+</html>
