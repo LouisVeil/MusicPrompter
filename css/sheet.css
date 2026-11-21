@@ -1,0 +1,113 @@
+/* Document Display Viewport */
+#viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px 50px 400px 50px;
+}
+#prompter-stage {
+  max-width: 850px;
+  margin: 0 auto;
+}
+#welcome-message {
+  text-align: center;
+  margin-top: 100px;
+  color: #666;
+}
+
+/* Song Sheet Formatting Protocol Rules */
+.song-title {
+  text-align: center;
+  font-size: 26pt;
+  font-weight: bold;
+  color: var(--text-bright);
+  margin-bottom: 5px;
+}
+.song-subtitle {
+  text-align: center;
+  font-size: 16pt;
+  color: #aaa;
+  margin-bottom: 25px;
+}
+.meta-line {
+  font-size: 12pt;
+  margin-bottom: 6px;
+  color: #bbb;
+}
+.empty-space {
+  height: 25px;
+}
+.song-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+.para-cell {
+  vertical-align: top;
+  font-size: 13pt;
+  font-weight: bold;
+  color: var(--para-color);
+  padding-top: 18px;
+  padding-right: 15px;
+}
+.content-cell {
+  vertical-align: top;
+}
+.line-container {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  line-height: 1.2;
+}
+.chord-row {
+  font-weight: bold;
+  color: var(--chord-color);
+  min-height: 18px;
+}
+.beat-count {
+  font-size: 0.75em;
+  color: #81c784;
+  font-weight: normal;
+  margin-left: 2px;
+}
+.repeat-badge {
+  color: #ff5252;
+  font-weight: bold;
+  margin-left: 6px;
+}
+.lyrics-row {
+  font-weight: bold;
+  color: var(--text-bright);
+  min-height: 22px;
+  white-space: pre-wrap;
+}
+
+/* Left-of-Lyrics Grid Layout Mode */
+.content-cell.left-chords-mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 22px;
+  align-items: baseline;
+}
+.left-chords-row {
+  display: contents;
+}
+.left-chords-col {
+  white-space: nowrap;
+  box-sizing: border-box;
+  font-weight: bold;
+  color: var(--chord-color);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  line-height: 1.3;
+}
+.left-lyrics-col {
+  font-weight: bold;
+  color: var(--text-bright);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+}
+/* Keeps chord-only lines spanning across the grid cleanly */
+.content-cell.left-chords-mode > div:not(.left-chords-row) {
+  grid-column: 1 / -1;
+}
