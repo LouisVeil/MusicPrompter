@@ -111,3 +111,20 @@
 .content-cell.left-chords-mode > div:not(.left-chords-row) {
   grid-column: 1 / -1;
 }
+/* SVG Chord Diagrams Strip */
+.chord-diagrams-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin: 14px auto 18px auto;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.chord-diagram-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

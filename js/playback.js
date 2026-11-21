@@ -2,12 +2,17 @@
 function toggleScroll() {
   var btn = document.getElementById('play-btn');
   var viewport = document.getElementById('viewport');
+  var syncBeatEl = document.getElementById('beat-auto-scroll-sync');
+  var shouldSyncBeat = syncBeatEl ? syncBeatEl.checked : false;
 
   if (isScrolling) {
     clearInterval(scrollInterval);
     btn.innerText = "▶ Play";
     btn.className = "btn play";
     isScrolling = false;
+    if (shouldSyncBeat && typeof isBeatRunning !== 'undefined' && isBeatRunning) {
+      toggleBeatEngine();
+    }
   } else {
     var speedInput = document.getElementById('scroll-speed');
     var speed = parseFloat(speedInput.value) || 1;
@@ -25,6 +30,9 @@ function toggleScroll() {
     btn.innerText = "❚❚ Pause";
     btn.className = "btn stop";
     isScrolling = true;
+    if (shouldSyncBeat && typeof isBeatRunning !== 'undefined' && !isBeatRunning) {
+      toggleBeatEngine();
+    }
   }
 }
 
@@ -50,12 +58,20 @@ function analyzeSongBeatsAndLines(rawText) {
     }
   }
 
-  // 2. Merge {Merge} lines just like compileMarkupToHTML
+  // 2. Handle {Merge} lines based on the Display Settings checkbox
+  var mergeLinesEl = document.getElementById('opt-merge-lines');
+  var shouldMergeLines = mergeLinesEl ? mergeLinesEl.checked : true;
   var mergedLines = [];
+
   for (var i = 0; i < lines.length; i++) {
     var cur = lines[i];
-    if (cur.toLowerCase().startsWith("{merge}") && mergedLines.length > 0) {
-      mergedLines[mergedLines.length - 1] += " " + cur.substring(7).trim();
+    if (cur.toLowerCase().startsWith("{merge}")) {
+      var textAfterTag = cur.substring(7).trim();
+      if (shouldMergeLines && mergedLines.length > 0) {
+        mergedLines[mergedLines.length - 1] += " " + textAfterTag;
+      } else {
+        mergedLines.push(textAfterTag);
+      }
       continue;
     }
     mergedLines.push(cur);
@@ -64,9 +80,23 @@ function analyzeSongBeatsAndLines(rawText) {
   var totalChordBeats = 0;
   var totalContentLines = 0;
   var lastLineBeats = 0;
+  var inTabBlock = false;
 
   mergedLines.forEach(function(ln) {
     if (!ln) return;
+
+    var lowerLn = ln.toLowerCase();
+    if (lowerLn.startsWith("{tab:") || lowerLn === "{tab}") {
+      inTabBlock = true;
+      return;
+    }
+    if (lowerLn === "{endtab}") {
+      inTabBlock = false;
+      return;
+    }
+    if (inTabBlock || lowerLn.startsWith("{tabpick:")) {
+      return;
+    }
 
     // Check for standalone {Repeat: n} directive on its own line
     var standaloneRepeatMatch = ln.match(/^\{repeat\s*:\s*(\d+)\s*\}$/i);

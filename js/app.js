@@ -221,6 +221,12 @@ function selectSong(songName) {
     }
   });
   document.getElementById('metro-bpm').value = foundTempo;
+  updateMetronomeTempo();
+
+
+  if (typeof loadBeatFromSongLines === 'function') {
+    loadBeatFromSongLines(rawLines);
+  }
 
   if (document.getElementById('auto-speed-toggle').checked) {
     toggleAutoSpeedState();
@@ -228,6 +234,49 @@ function selectSong(songName) {
     document.getElementById('scroll-speed').value = getManualSongScrollSpeed(rawMarkupText);
   }
 }
+
+function applyTempoToCurrentSong() {
+  if (!activeSongName || !loadedSongsMap[activeSongName]) {
+    alert("Select a song first before saving its BPM.");
+    return;
+  }
+
+  var bpmVal = parseInt(document.getElementById('metro-bpm').value, 10);
+  if (isNaN(bpmVal) || bpmVal < 30 || bpmVal > 300) {
+    alert("Please enter a valid BPM between 30 and 300.");
+    return;
+  }
+
+  var directiveLine = "{Tempo: " + bpmVal + "}";
+  var lines = loadedSongsMap[activeSongName].split(/\r?\n/);
+  var replaced = false;
+
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().toLowerCase().startsWith("{tempo:")) {
+      lines[i] = directiveLine;
+      replaced = true;
+      break;
+    }
+  }
+
+  if (!replaced) {
+    var insertAt = 0;
+    for (var j = 0; j < lines.length; j++) {
+      if (lines[j].trim().toLowerCase().startsWith("{title:")) {
+        insertAt = j + 1;
+        break;
+      }
+    }
+    lines.splice(insertAt, 0, directiveLine);
+  }
+
+  loadedSongsMap[activeSongName] = lines.join("\n");
+  modifiedSongsStatus[activeSongName] = true;
+  renderPlaylist();
+  saveAppStateToCache();
+  alert("Saved " + directiveLine + " to '" + activeSongName + "'.\n\nRemember to click 💾 on the song to write it to disk.");
+}
+
 function adjustTextSize(direction) {
   globalSizeModifier += direction;
   var activeRows = document.querySelectorAll('.chord-row, .lyrics-row, .para-cell, .left-chords-col, .left-lyrics-col');
@@ -304,15 +353,57 @@ function toggleSidebarView() {
   }
 }
 
+var currentSidebarTab = 'songs';
+
+function switchSidebarTab(tabName) {
+  currentSidebarTab = tabName;
+  closeSidebarMenu();
+
+  var songListEl = document.getElementById('song-list');
+  var beatsPanelEl = document.getElementById('beats-panel');
+  var recordPanelEl = document.getElementById('record-panel');
+  var menuWrapper = document.getElementById('sidebar-menu-wrapper');
+
+  var songsBtn = document.getElementById('tab-btn-songs');
+  var beatsBtn = document.getElementById('tab-btn-beats');
+  var recordBtn = document.getElementById('tab-btn-record');
+
+  songListEl.style.display = (tabName === 'songs') ? 'block' : 'none';
+  beatsPanelEl.style.display = (tabName === 'beats') ? 'flex' : 'none';
+  if (recordPanelEl) recordPanelEl.style.display = (tabName === 'record') ? 'flex' : 'none';
+  if (menuWrapper) menuWrapper.style.display = (tabName === 'record') ? 'none' : 'inline-block';
+
+  songsBtn.classList.toggle('active', tabName === 'songs');
+  beatsBtn.classList.toggle('active', tabName === 'beats');
+  if (recordBtn) recordBtn.classList.toggle('active', tabName === 'record');
+}
+
 function toggleSidebarMenu(event) {
   event.stopPropagation();
-  var menu = document.getElementById('sidebar-dropdown');
-  menu.classList.toggle('open');
+  var activeMenuId = (currentSidebarTab === 'beats') ? 'beats-dropdown' : 'sidebar-dropdown';
+  var otherMenuId = (currentSidebarTab === 'beats') ? 'sidebar-dropdown' : 'beats-dropdown';
+
+  var activeMenu = document.getElementById(activeMenuId);
+  var otherMenu = document.getElementById(otherMenuId);
+  if (otherMenu) {
+    otherMenu.classList.remove('open');
+    otherMenu.style.display = 'none';
+  }
+  if (activeMenu) {
+    var willOpen = !activeMenu.classList.contains('open');
+    activeMenu.classList.toggle('open', willOpen);
+    activeMenu.style.display = willOpen ? 'block' : 'none';
+  }
 }
 
 function closeSidebarMenu() {
-  var menu = document.getElementById('sidebar-dropdown');
-  if (menu) menu.classList.remove('open');
+  ['sidebar-dropdown', 'beats-dropdown'].forEach(function(id) {
+    var menu = document.getElementById(id);
+    if (menu) {
+      menu.classList.remove('open');
+      menu.style.display = 'none';
+    }
+  });
 }
 
 window.addEventListener('click', function(event) {

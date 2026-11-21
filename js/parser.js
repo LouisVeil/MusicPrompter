@@ -124,36 +124,77 @@ function compileMarkupToHTML(lines) {
   var showSongInfo = document.getElementById('opt-show-song-info') ? document.getElementById('opt-show-song-info').checked : false;
   var showStrumInfo = document.getElementById('opt-show-strum-info') ? document.getElementById('opt-show-strum-info').checked : true;
   var showParaName = document.getElementById('opt-show-para-name') ? document.getElementById('opt-show-para-name').checked : true;
+  var mergeLinesEl = document.getElementById('opt-merge-lines');
+  var shouldMergeLines = mergeLinesEl ? mergeLinesEl.checked : true;
   var chordsLocEl = document.getElementById('opt-chords-location');
   var isLeftChords = chordsLocEl && chordsLocEl.value === "left-of-lyrics";
   var cellClass = isLeftChords ? "content-cell left-chords-mode" : "content-cell";
 
+  var showChordDiagramsEl = document.getElementById('opt-show-chord-diagrams');
+  var showChordDiagrams = showChordDiagramsEl ? showChordDiagramsEl.checked : true;
+  var customChordDefs = {};
+  var chordPosSetting = "top";
+
   var lSz = 18, cSz = 14, lp = 12, rp = 88;
   var fontFm = "Roboto Mono";
-  var isTab = false, seenFirstPara = false, html = "", comp = [];
+  var inSongTable = false, inGuitarTab = false, seenFirstPara = false;
+  var guitarTabHeader = "", guitarTabLines = [];
+  var html = "", comp = [];
   currentSongHeaderInfo = [];
   currentSongLayoutInfo = [];
 
   for (var i = 0; i < lines.length; i++) {
-    var cur = lines[i];
-    if (cur.toLowerCase().startsWith("{merge}") && comp.length > 0) {
+    var cur = lines.at(i);
+    if (shouldMergeLines && cur.toLowerCase().startsWith("{merge}") && comp.length > 0) {
       var textToAppend = cur.substring(7).trim();
-      comp[comp.length - 1] = comp[comp.length - 1] + " " + textToAppend;
+      comp[comp.length - 1] = comp.at(comp.length - 1) + " " + textToAppend;
       continue;
     }
     comp.push(cur);
   }
 
   comp.forEach(function(ln) {
-    if (ln.startsWith("{") && ln.endsWith("}")) {
-      var d = ln.substring(1, ln.length - 1).trim();
+    var trimmedLn = ln.trim();
+
+    if (inGuitarTab) {
+      if (trimmedLn.toLowerCase() === "{endtab}") {
+        inGuitarTab = false;
+        if (typeof parseTabBlock === "function" && typeof registerAndRenderTabHTML === "function") {
+          html += registerAndRenderTabHTML(parseTabBlock(guitarTabHeader, guitarTabLines));
+        }
+        guitarTabHeader = "";
+        guitarTabLines = [];
+      } else {
+        guitarTabLines.push(ln);
+      }
+      return;
+    }
+
+    if (trimmedLn.startsWith("{") && trimmedLn.endsWith("}")) {
+      var d = trimmedLn.substring(1, trimmedLn.length - 1).trim();
       var cIdx = d.indexOf(":");
       var k = cIdx !== -1 ? d.substring(0, cIdx).trim().toLowerCase() : d.toLowerCase();
       var v = cIdx !== -1 ? d.substring(cIdx + 1).trim() : "";
 
+      if (k === "tab") {
+        if (inSongTable) { html += "</td></tr></table>"; inSongTable = false; }
+        inGuitarTab = true;
+        guitarTabHeader = v;
+        guitarTabLines = [];
+        return;
+      }
+
+      if (k === "tabpick") {
+        if (inSongTable) { html += "</td></tr></table>"; inSongTable = false; }
+        if (typeof parseTabPickLine === "function" && typeof registerAndRenderTabHTML === "function") {
+          html += registerAndRenderTabHTML(parseTabPickLine(v));
+        }
+        return;
+      }
+
       if (k === "para") {
         seenFirstPara = true;
-        if (isTab) { html += "</td></tr>"; } else { html += "<table class='song-table'>"; isTab = true; }
+        if (inSongTable) { html += "</td></tr>"; } else { html += "<table class='song-table'>"; inSongTable = true; }
         if (showParaName) {
           html += "<tr><td class='para-cell'>" + v + "</td><td class='" + cellClass + "'>";
         } else {
@@ -162,10 +203,9 @@ function compileMarkupToHTML(lines) {
         return;
       }
 
-      if (!seenFirstPara && ln.trim() !== "") {
+      if (!seenFirstPara && trimmedLn !== "") {
         var displayLayoutKeys = ["lyricssize", "chordssize", "lyricschordsfont", "parasplit", "chorddef", "chordpos"];
-        var skipKeys = ["empty", "split"];
-
+        var skipKeys = ["empty", "split", "beatstyle"];
         if (displayLayoutKeys.indexOf(k) !== -1) {
           currentSongLayoutInfo.push(d);
         } else if (skipKeys.indexOf(k) === -1) {
@@ -185,28 +225,63 @@ function compileMarkupToHTML(lines) {
         fontFm = v || "Roboto Mono";
       } else if (k === "parasplit") {
         var sp = v.split(/\s+/).map(Number);
-        if (sp.length === 2 && !isNaN(sp[0]) && !isNaN(sp[1])) { lp = sp[0]; rp = sp[1]; }
+        if (sp.length === 2 && !isNaN(sp.at(0)) && !isNaN(sp.at(1))) { lp = sp.at(0); rp = sp.at(1); }
       } else if (k === "empty") {
         html += "<div class='empty-space' style='height:" + (lSz * 1.5) + "px;'></div>";
       } else if (k === "split") {
         html += "<div style='clear:both;'></div>";
-      } else if (k !== "chorddef" && k !== "chordpos") {
+      } else if (k === "chorddef" || k === "chord") {
+        if (typeof parseChordDefString === "function") {
+          var parsedDef = parseChordDefString(v);
+          if (parsedDef) customChordDefs[parsedDef.name] = parsedDef;
+        }
+      } else if (k === "chordpos") {
+        chordPosSetting = v.toLowerCase();
+      } else if (k !== "chorddef" && k !== "chordpos" && k !== "beatstyle") {
         var isStrumTag = (k.indexOf("strum") !== -1 || k.indexOf("pick") !== -1);
         if (isStrumTag && !showStrumInfo) return;
         if (!seenFirstPara && !isStrumTag && !showSongInfo) return;
-
         html += "<div class='meta-line'><b>" + (k.charAt(0).toUpperCase() + k.slice(1)) + ":</b> " + v + "</div>";
       }
-    } else {
-      if (!seenFirstPara && ln.trim() !== "") {
-        currentSongHeaderInfo.push(ln.trim());
-        if (!showSongInfo) return;
+      return;
+    }
+
+    if (!seenFirstPara && trimmedLn !== "") {
+      seenFirstPara = true;
+      if (!inSongTable) {
+        html += "<table class='song-table'><tr>" + (showParaName ? "<td class='para-cell'></td>" : "") + "<td class='" + cellClass + "'>";
+        inSongTable = true;
       }
-      var hLn = parseLyricsLine(ln, lSz, cSz, fontFm);
-      html += isTab ? hLn : "<div>" + hLn + "</div>";
+    }
+
+    if (trimmedLn === "") {
+      html += "<div style='height:" + (lSz * 0.7) + "px;'></div>";
+    } else {
+      html += parseLyricsLine(ln, lSz, cSz, fontFm);
     }
   });
 
-  if (isTab) html += "</td></tr></table>";
+  if (inGuitarTab && guitarTabLines.length > 0 && typeof parseTabBlock === "function") {
+    html += registerAndRenderTabHTML(parseTabBlock(guitarTabHeader, guitarTabLines));
+  }
+
+  if (inSongTable) html += "</td></tr></table>";
+
+  if (showChordDiagrams && chordPosSetting !== "none" && typeof renderSongChordDiagramsHTML === "function") {
+    var diagramsHtml = renderSongChordDiagramsHTML(comp, customChordDefs);
+    if (diagramsHtml) {
+      if (chordPosSetting === "bottom") {
+        html += diagramsHtml;
+      } else {
+        var firstTableIdx = html.indexOf("<table class='song-table'>");
+        if (firstTableIdx !== -1) {
+          html = html.slice(0, firstTableIdx) + diagramsHtml + html.slice(firstTableIdx);
+        } else {
+          html = diagramsHtml + html;
+        }
+      }
+    }
+  }
+
   return html;
 }

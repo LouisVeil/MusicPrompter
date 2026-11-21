@@ -8,16 +8,20 @@
 </head>
 <body>
 
-  <!-- Left Batch File Explorer Panel -->
+  <!-- Left Batch File Explorer & Beats Studio Panel -->
   <div id="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">Song List</span>
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab-btn active" id="tab-btn-songs" onclick="switchSidebarTab('songs')">Songs</button>
+        <button class="sidebar-tab-btn" id="tab-btn-beats" onclick="switchSidebarTab('beats')">Beats</button>
+        <button class="sidebar-tab-btn" id="tab-btn-record" onclick="switchSidebarTab('record')">Record</button>
+      </div>
 
       <input type="file" id="directory-picker" accept=".txt,text/plain" multiple style="display: none;" onchange="loadFolderSongs(event)">
       <input type="file" id="playlist-loader" accept=".json,application/json" style="display: none;" onchange="importPlaylistFile(event)">
 
       <div class="menu-wrapper" id="sidebar-menu-wrapper">
-        <button class="dots-btn" onclick="toggleSidebarMenu(event)" title="Song List Options">⋮</button>
+        <button class="dots-btn" onclick="toggleSidebarMenu(event)" title="Options">⋮</button>
         <div class="dropdown-menu" id="sidebar-dropdown">
           <button class="dropdown-item" onclick="closeSidebarMenu(); document.getElementById('directory-picker').click()">📄 Load Song File</button>
           <button class="dropdown-item" onclick="closeSidebarMenu(); document.getElementById('playlist-loader').click()">📂 Load Set File</button>
@@ -26,12 +30,110 @@
           <button class="dropdown-item" onclick="closeSidebarMenu(); saveAllSongs()">📦 Save All Songs</button>
           <button class="dropdown-item danger" onclick="closeSidebarMenu(); clearEntirePlaylist()">🗑️ Clear List</button>
         </div>
+        <div class="dropdown-menu" id="beats-dropdown" style="display: none;">
+          <button class="dropdown-item" onclick="closeSidebarMenu(); saveCurrentBeatPreset()">💾 Save Current as Preset</button>
+          <button class="dropdown-item" onclick="closeSidebarMenu(); applyBeatToCurrentSong()">📌 Apply to Current Song</button>
+          <button class="dropdown-item" onclick="closeSidebarMenu(); document.getElementById('beat-presets-loader').click()">📥 Import Presets File</button>
+          <button class="dropdown-item" onclick="closeSidebarMenu(); exportBeatPresetsToFile()">📤 Export Presets File</button>
+          <button class="dropdown-item danger" onclick="closeSidebarMenu(); deleteSelectedBeatPreset()">🗑️ Delete Selected Preset</button>
+        </div>
       </div>
     </div>
+
+    <!-- VIEW 1: SONG LIST -->
     <ul id="song-list">
       <div style="color: #555; text-align: center; font-size: 13px; margin-top: 20px;">No songs loaded yet.</div>
     </ul>
-  </div>
+
+    <!-- VIEW 2: MULTI-TRACK BEATS & RHYTHMS -->
+    <div id="beats-panel" style="display: none;">
+      <div class="beats-master-bar">
+        <button class="btn play" id="beat-play-btn" onclick="toggleBeatEngine()" style="flex: 1; padding: 8px 10px;">▶ Start Beat</button>
+        <select id="beat-key-select" class="beat-select" title="Master Root Key">
+          <option value="C">Key: C</option>
+          <option value="Cm">Key: Cm</option>
+          <option value="D">Key: D</option>
+          <option value="Dm">Key: Dm</option>
+          <option value="E">Key: E</option>
+          <option value="Em">Key: Em</option>
+          <option value="F">Key: F</option>
+          <option value="G">Key: G</option>
+          <option value="A">Key: A</option>
+          <option value="Am" selected>Key: Am</option>
+          <option value="B">Key: B</option>
+          <option value="Bm">Key: Bm</option>
+        </select>
+      </div>
+
+      <label class="beat-auto-row">
+        <input type="checkbox" id="beat-auto-scroll-sync">
+        <span>Auto-start with Scroll ▶ Play</span>
+      </label>
+
+      <!-- Add Track Buttons -->
+      <div class="beat-add-bar">
+        <button class="beat-add-btn" onclick="addBeatTrack('drums')" title="Add Drums Track">+ 🥁</button>
+        <button class="beat-add-btn" onclick="addBeatTrack('bass')" title="Add Bass Track">+ 🎸</button>
+        <button class="beat-add-btn" onclick="addBeatTrack('guitar')" title="Add Guitar Track">+ 🪕</button>
+        <button class="beat-add-btn" onclick="addBeatTrack('piano')" title="Add Piano Track">+ 🎹</button>
+      </div>
+
+      <!-- Dynamic Track Cards Container -->
+      <div id="beat-tracks-container"></div>
+
+      <!-- Quick Preset Selector -->
+      <div class="beat-storage-box">
+        <div class="beat-section-label">Saved Presets</div>
+        <input type="file" id="beat-presets-loader" accept=".json,application/json" style="display: none;" onchange="importBeatPresetsFromFile(event)">
+        <select id="saved-beats-select" class="beat-select full" onchange="loadSelectedBeatPreset()">
+          <option value="">-- Load Saved Preset --</option>
+        </select>
+      </div>
+    </div>  
+        <!-- VIEW 3: SESSION RECORDER & BACKING TRACK -->
+      <div id="record-panel" style="display: none;">
+        <div class="beats-master-bar">
+          <button class="btn play" id="rec-toggle-btn" onclick="toggleRecordingSession()" style="flex: 1; padding: 8px 10px;">⏺ Record</button>
+          <select id="rec-source-mode" class="beat-select" title="What gets recorded into the file">
+            <option value="mix" selected>Mic + Backing</option>
+            <option value="mic">Mic Only</option>
+          </select>
+        </div>
+
+        <div id="rec-status-bar" class="rec-status-bar">Ready to record</div>
+
+        <label class="beat-auto-row">
+          <input type="checkbox" id="rec-auto-scroll" checked>
+          <span>Auto-start Scroll ▶ Play</span>
+        </label>
+        <label class="beat-auto-row">
+          <input type="checkbox" id="rec-count-in">
+          <span>4-Beat Count-in (at BPM)</span>
+        </label>
+
+        <!-- External Backing Track (.mp4, .mp3, .wav, .m4a) -->
+        <div class="beat-track-card">
+          <div class="beat-track-header">
+            <span style="font-size: 12px; font-weight: bold; color: var(--text-bright);">🎞️ Backing (.mp4 / Audio)</span>
+            <button class="control-btn" onclick="document.getElementById('backing-file-input').click()">📂 Load</button>
+          </div>
+          <input type="file" id="backing-file-input" accept="audio/*,video/mp4,.mp4,.m4a,.mp3,.wav" style="display: none;" onchange="loadExternalBackingTrack(event)">
+          <div id="backing-file-name" style="font-size: 11px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No external track loaded</div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+            <button class="control-btn" id="backing-play-btn" onclick="toggleExternalBackingPlay()" disabled>▶ Play</button>
+            <button class="control-btn" id="backing-restart-btn" onclick="restartExternalBacking()" disabled>⏮</button>
+            <input type="range" id="backing-vol-slider" min="0" max="100" value="80" class="beat-vol-slider" style="flex: 1;" oninput="updateExternalBackingVolume()" title="Backing Track Volume">
+          </div>
+        </div>
+
+        <!-- Recorded Takes List -->
+        <div class="beat-section-label" style="margin-top: 4px;">Recorded Takes</div>
+        <div id="recorded-takes-list" style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="color: #666; font-size: 12px; text-align: center; padding: 8px 0;">No recordings yet.</div>
+        </div>
+      </div>  
+    </div>
+
 
   <!-- Performance Workspace Display Viewport -->
   <div id="main-canvas">
@@ -39,6 +141,9 @@
       <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="toggleSidebarView()" title="Hide Song List">◀</button>
       <button class="panel-icon-btn" onclick="openSettingsModal()" title="Display Settings">⚙</button>
       <button class="panel-icon-btn info-icon" onclick="openSongInfoModal()" title="Song Info">i</button>
+      <button class="panel-icon-btn" onclick="openAllChordsModal()" title="All Chords Reference">🎸</button>
+      <button class="panel-icon-btn" onclick="openDirectivesHelpModal()" title="Directives & Tab Syntax Guide">?</button>
+
 
       <div style="border-left: 1px solid #444; height: 46px; margin: 0 6px;"></div>
 
@@ -68,14 +173,14 @@
             <button class="bpm-step-btn" onclick="adjustBPM(5)" title="Increase 5 BPM">+5</button>
           </div>
           <span style="font-size: 11px; color: #888;">BPM</span>
+          <button class="bpm-step-btn" onclick="applyTempoToCurrentSong()" title="Save BPM to Current Song">📌</button>
+
           <div id="metro-visual" style="width: 22px; height: 22px; background: #333; border-radius: 4px; transition: background 0.05s ease;"></div>
           <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
             <input type="checkbox" id="metro-audio-toggle"> 🔊 Sound
           </label>
         </div>
       </div>
-
-      <div style="border-left: 1px solid #444; height: 46px; margin: 0 6px;"></div>
 
       <button class="btn" style="margin-left: auto;" onclick="adjustTextSize(1)">A+</button>
       <button class="btn" onclick="adjustTextSize(-1)">A-</button>
@@ -90,7 +195,6 @@
       </div>
     </div>
   </div>
-
   <!-- Settings Popup Modal -->
   <div class="modal-overlay" id="settings-modal" onclick="closeModalOnBackdrop(event, 'settings-modal')">
     <div class="modal-box">
@@ -111,6 +215,10 @@
           <span>Show Para Name</span>
           <input type="checkbox" id="opt-show-para-name" checked onchange="applyDisplaySettings()">
         </label>
+        <label class="setting-row">
+          <span>Merge Lines</span>
+          <input type="checkbox" id="opt-merge-lines" checked onchange="applyDisplaySettings()">
+        </label>
         <div class="setting-row">
           <span>Chords Location</span>
           <select id="opt-chords-location" class="setting-select" onchange="applyDisplaySettings()">
@@ -123,6 +231,11 @@
           <span>Show Beat Count</span>
           <input type="checkbox" id="opt-show-beat-count" onchange="applyDisplaySettings()">
         </label>
+        <label class="setting-row">
+          <span>Show Chord Diagrams</span>
+          <input type="checkbox" id="opt-show-chord-diagrams" checked onchange="applyDisplaySettings()">
+        </label>
+
         <hr style="border: none; border-top: 1px solid #3a3a3a; margin: 14px 0;">
         <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 8px;">
           Song Layout Directives
@@ -147,7 +260,7 @@
     </div>
   </div>
 
-  <!-- Edit All Songs (Batch Script) Modal -->
+  <!-- Edit All Songs Modal -->
   <div class="modal-overlay" id="batch-edit-modal" onclick="closeModalOnBackdrop(event, 'batch-edit-modal')">
     <div class="modal-box" style="max-width: 600px;">
       <div class="modal-header">
@@ -159,9 +272,7 @@
           Write JavaScript using <b>text</b> (the song's full content) and <b>name</b> (the song title), and <b>return</b> the updated text.
         </div>
         <textarea id="batch-script-input" style="width: 100%; height: 180px; background: #121212; color: #4fc3f7; font-family: monospace; font-size: 13px; padding: 12px; border: 1px solid #444; border-radius: 4px; box-sizing: border-box;" placeholder="// Example: Replace {title: with {Name:&#10;return text.replace(/\{title:/gi, '{Name:');"></textarea>
-        
         <div id="batch-preview-status" style="margin-top: 10px; font-size: 13px; color: #ffb74d; min-height: 20px;"></div>
-
         <div style="display: flex; gap: 10px; margin-top: 14px; justify-content: space-between; align-items: center;">
           <button class="btn" style="background: #2a2a2a; color: #bbb; font-size: 13px;" onclick="clearBatchScript()">🗑️ Clear</button>
           <div style="display: flex; gap: 10px;">
@@ -173,9 +284,34 @@
     </div>
   </div>
 
-  <!-- Scripts loaded in exact dependency order -->
+  <!-- All Chords Reference Modal -->
+  <div class="modal-overlay" id="all-chords-modal" onclick="closeModalOnBackdrop(event, 'all-chords-modal')">
+    <div class="modal-box" style="max-width: 780px; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <span class="modal-title">🎸 Guitar Chord Reference</span>
+        <button class="modal-close" onclick="closeModal('all-chords-modal')">✕</button>
+      </div>
+      <div class="modal-body" id="all-chords-modal-body" style="overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <!-- Directives & Tab Syntax Reference Modal -->
+<div class="modal-overlay" id="directives-help-modal" onclick="closeModalOnBackdrop(event, 'directives-help-modal')">
+  <div class="modal-box" style="max-width: 760px; max-height: 85vh; display: flex; flex-direction: column;">
+    <div class="modal-header">
+      <span class="modal-title">📖 Directives & Guitar Tab Reference</span>
+      <button class="modal-close" onclick="closeModal('directives-help-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="directives-help-body" style="overflow-y: auto; font-size: 13px; line-height: 1.55;"></div>
+  </div>
+</div>
+
   <script src="js/state.js"></script>
+  <script src="js/chords.js"></script>
+  <script src="js/tabs.js"></script>
   <script src="js/parser.js"></script>
+  <script src="js/beats.js"></script>
+  <script src="js/recorder.js"></script>
   <script src="js/playback.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/app.js"></script>
