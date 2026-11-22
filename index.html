@@ -28,6 +28,7 @@
           <button class="dropdown-item" onclick="closeSidebarMenu(); exportPlaylistFile()">💾 Save Current List as Set</button>
           <button class="dropdown-item" onclick="closeSidebarMenu(); openBatchEditModal()">⚡ Edit All Songs</button>
           <button class="dropdown-item" onclick="closeSidebarMenu(); saveAllSongs()">📦 Save All Songs</button>
+          <button class="dropdown-item" onclick="closeSidebarMenu(); openMakePdfModal()">📑 Make PDF</button>
           <button class="dropdown-item danger" onclick="closeSidebarMenu(); clearEntirePlaylist()">🗑️ Clear List</button>
         </div>
         <div class="dropdown-menu" id="beats-dropdown" style="display: none;">
@@ -157,6 +158,7 @@
           <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; color: #ffb74d;">
             <input type="checkbox" id="auto-speed-toggle" onchange="toggleAutoSpeedState()"> Auto
           </label>
+          <button class="bpm-step-btn" onclick="syncCursorToViewport()" title="Sync App Position to Read Line">🎯 Sync</button>
         </div>
       </div>
 
@@ -184,6 +186,10 @@
 
       <button class="btn" style="margin-left: auto;" onclick="adjustTextSize(1)">A+</button>
       <button class="btn" onclick="adjustTextSize(-1)">A-</button>
+      <!-- Fixed Reading Cursor (Your Eye Target) -->
+      <div id="reading-cursor-line" style="top: 32%;">
+        <span class="reading-cursor-badge">▶ READ</span>
+      </div>
     </div>
 
     <div id="viewport">
@@ -235,6 +241,15 @@
           <span>Show Chord Diagrams</span>
           <input type="checkbox" id="opt-show-chord-diagrams" checked onchange="applyDisplaySettings()">
         </label>
+        <label class="setting-row">
+          <span>Show Reading Cursor</span>
+          <input type="checkbox" id="opt-show-cursor" checked onchange="updateReadingCursorSettings()">
+        </label>
+        <div class="setting-row">
+          <span>Cursor Height (<span id="cursor-pos-label">32%</span>)</span>
+          <input type="range" id="opt-cursor-pos" min="15" max="65" value="32" oninput="updateReadingCursorSettings()" style="width: 120px; cursor: pointer;">
+        </div>
+
 
         <hr style="border: none; border-top: 1px solid #3a3a3a; margin: 14px 0;">
         <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 8px;">
@@ -306,6 +321,52 @@
   </div>
 </div>
 
+  <!-- Make PDF Modal -->
+  <div class="modal-overlay" id="make-pdf-modal" onclick="closeModalOnBackdrop(event, 'make-pdf-modal')">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <span class="modal-title">📑 Make PDF Songbook</span>
+        <button class="modal-close" onclick="closeModal('make-pdf-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 12px; color: #aaa; margin-bottom: 4px;">PDF / Cover Title (for multi-song sets)</label>
+          <input type="text" id="pdf-book-title" value="Songbook" style="width: 100%; box-sizing: border-box; background: #121212; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 13px;">
+        </div>
+
+        <div style="font-size: 12px; font-weight: bold; color: #ffb74d; margin-bottom: 6px;">Formats to Include</div>
+        <label class="setting-row">
+          <span>Chords in Lyrics</span>
+          <input type="checkbox" id="pdf-fmt-in-lyrics" checked>
+        </label>
+        <label class="setting-row">
+          <span>Chords Left</span>
+          <input type="checkbox" id="pdf-fmt-left">
+        </label>
+        <label class="setting-row">
+          <span>No Chords</span>
+          <input type="checkbox" id="pdf-fmt-none">
+        </label>
+
+        <div class="setting-row" style="margin-top: 8px;">
+          <span>Show Chord Diagrams</span>
+          <select id="pdf-chord-diagrams" class="setting-select">
+            <option value="none" selected>None (Default)</option>
+            <option value="top">Top</option>
+            <option value="bottom">Bottom</option>
+          </select>
+        </div>
+
+        <div id="pdf-gen-status" style="margin-top: 10px; font-size: 12px; color: #4fc3f7; min-height: 18px;"></div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+          <button class="btn" style="background: #333; font-size: 13px;" onclick="closeModal('make-pdf-modal')">Cancel</button>
+          <button class="btn" style="background: #1155cc; border: none; font-size: 13px;" onclick="generateSongsPDF()">💾 Choose Location & Create PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="js/state.js"></script>
   <script src="js/chords.js"></script>
   <script src="js/tabs.js"></script>
@@ -314,6 +375,7 @@
   <script src="js/recorder.js"></script>
   <script src="js/playback.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/pdf.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

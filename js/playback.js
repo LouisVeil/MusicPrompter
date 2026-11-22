@@ -1,4 +1,8 @@
-// Smooth accumulative fractional scroll engine
+var appElapsedSeconds = 0;
+var lastFrameTimestamp = null;
+var exactPositionTracker = 0;
+
+// Smooth accumulative fractional scroll engine + Aligned App Position Cursor
 function toggleScroll() {
   var btn = document.getElementById('play-btn');
   var viewport = document.getElementById('viewport');
@@ -10,21 +14,42 @@ function toggleScroll() {
     btn.innerText = "▶ Play";
     btn.className = "btn play";
     isScrolling = false;
+    lastFrameTimestamp = null;
     if (shouldSyncBeat && typeof isBeatRunning !== 'undefined' && isBeatRunning) {
       toggleBeatEngine();
     }
   } else {
+    if (viewport.scrollTop < 10) {
+      appElapsedSeconds = 0;
+      alignCursorToFirstLine();
+      if (document.getElementById('auto-speed-toggle') && document.getElementById('auto-speed-toggle').checked) {
+        var stats = analyzeSongBeatsAndLines(loadedSongsMap[activeSongName]);
+        document.getElementById('scroll-speed').value = calculateAutoScrollSpeed(stats);
+      }
+    }
+
     var speedInput = document.getElementById('scroll-speed');
-    var speed = parseFloat(speedInput.value) || 1;
-    var exactPositionTracker = viewport.scrollTop;
+    exactPositionTracker = viewport.scrollTop;
+    lastFrameTimestamp = performance.now();
+
+    bindLineClickHandlers();
+    updateAppCursorPosition();
 
     scrollInterval = setInterval(function() {
+      var now = performance.now();
+      var deltaSec = (now - lastFrameTimestamp) / 1000;
+      lastFrameTimestamp = now;
+      appElapsedSeconds += deltaSec;
+
+      var speed = parseFloat(speedInput.value) || 1;
       exactPositionTracker += speed;
       var wholePixelsToMove = Math.floor(exactPositionTracker) - viewport.scrollTop;
 
       if (wholePixelsToMove >= 1) {
         viewport.scrollBy(0, wholePixelsToMove);
       }
+
+      updateAppCursorPosition();
     }, 16.67);
 
     btn.innerText = "❚❚ Pause";
@@ -35,6 +60,223 @@ function toggleScroll() {
     }
   }
 }
+
+// Snap the fixed Read Line to the vertical center of Line 1 at the start of a song
+function alignCursorToFirstLine() {
+  var viewport = document.getElementById('viewport');
+  var cursorLine = document.getElementById('reading-cursor-line');
+  var firstLine = document.querySelector('#prompter-stage .line-container');
+  if (!viewport || !cursorLine || !firstLine) return;
+
+  var vpRect = viewport.getBoundingClientRect();
+  var lineRect = firstLine.getBoundingClientRect();
+  var lineCenterOffset = (lineRect.top + lineRect.height / 2) - vpRect.top;
+  var pct = Math.max(15, Math.min(65, Math.round((lineCenterOffset / vpRect.height) * 100)));
+
+  cursorLine.style.top = pct + "%";
+
+  var posEl = document.getElementById('opt-cursor-pos');
+  var labelEl = document.getElementById('cursor-pos-label');
+  if (posEl) posEl.value = pct;
+  if (labelEl) labelEl.innerText = pct + "%";
+}
+
+// Calculate exact auto-scroll speed from Line 1 center to Last Line center
+function calculateAutoScrollSpeed(stats) {
+  var bpm = parseFloat(document.getElementById('metro-bpm').value) || 90;
+  if (stats.beats <= 0 || bpm <= 0) return 0.2;
+
+  var totalSeconds = (stats.beats / bpm) * 60;
+  var lineEls = document.querySelectorAll('#prompter-stage .line-container');
+
+  var scrollablePixels = 0;
+  if (lineEls.length >= 2) {
+    var firstRect = lineEls[0].getBoundingClientRect();
+    var lastRect = lineEls[lineEls.length - 1].getBoundingClientRect();
+    scrollablePixels = Math.max(0, (lastRect.top + lastRect.height / 2) - (firstRect.top + firstRect.height / 2));
+  } else {
+    var stage = document.getElementById('prompter-stage');
+    var viewport = document.getElementById('viewport');
+    var stageHeight = stage ? stage.scrollHeight : 0;
+    var visibleBuffer = viewport ? (viewport.clientHeight * 0.45) : 0;
+    scrollablePixels = Math.max(stageHeight - visibleBuffer, stageHeight * 0.5);
+  }
+
+  var pixelsPerFrame = scrollablePixels / (totalSeconds * 60);
+  return Math.max(0.05, Math.round(pixelsPerFrame * 1000) / 1000);
+}
+
+// Build cumulative beat weights for each rendered .line-container so long/short lines advance accurately
+function getLineBeatMilestones(lineEls, totalBeats) {
+  var milestones = [];
+  var rawWeights = [];
+  var weightSum = 0;
+
+  lineEls.forEach(function(el) {
+    // Count chords on this rendered line as a weight proxy (minimum 1 unit so lyric-only lines still advance)
+    var chordSpans = el.querySelectorAll('.chord, .chord-item, .chord-row');
+    var textChords = (el.querySelector('.chord-row') ? el.querySelector('.chord-row').innerText.trim().split(/\s+/).filter(Boolean).length : 0);
+    var weight = Math.max(1, textChords || chordSpans.length || 1);
+    rawWeights.push(weight);
+    weightSum += weight;
+  });
+
+  var running = 0;
+  for (var i = 0; i < rawWeights.length; i++) {
+    running += (rawWeights[i] / weightSum) * totalBeats;
+    milestones.push(running);
+  }
+  return milestones;
+}
+
+function updateAppCursorPosition() {
+  var showCursorEl = document.getElementById('opt-show-cursor');
+  if (showCursorEl && !showCursorEl.checked) return;
+
+  var lineEls = document.querySelectorAll('#prompter-stage .line-container');
+  if (!lineEls.length) return;
+
+  var targetIndex = 0;
+  var isAuto = document.getElementById('auto-speed-toggle') && document.getElementById('auto-speed-toggle').checked;
+
+  if (isAuto && activeSongName && loadedSongsMap[activeSongName]) {
+    var stats = analyzeSongBeatsAndLines(loadedSongsMap[activeSongName]);
+    var bpm = parseFloat(document.getElementById('metro-bpm').value) || 90;
+    var elapsedBeats = (appElapsedSeconds / 60) * bpm;
+
+    if (stats.beats > 0) {
+      var milestones = getLineBeatMilestones(lineEls, stats.beats);
+      targetIndex = lineEls.length - 1;
+      for (var i = 0; i < milestones.length; i++) {
+        if (elapsedBeats < milestones[i]) {
+          targetIndex = i;
+          break;
+        }
+      }
+    }
+  } else {
+    var viewport = document.getElementById('viewport');
+    var cursorLine = document.getElementById('reading-cursor-line');
+    var readY = cursorLine
+      ? cursorLine.getBoundingClientRect().top
+      : viewport.getBoundingClientRect().top + (viewport.clientHeight * 0.32);
+
+    var closestDist = Infinity;
+    lineEls.forEach(function(el, idx) {
+      var rect = el.getBoundingClientRect();
+      var center = rect.top + rect.height / 2;
+      var dist = Math.abs(center - readY);
+      if (dist < closestDist) {
+        closestDist = dist;
+        targetIndex = idx;
+      }
+    });
+  }
+
+  lineEls.forEach(function(el, idx) {
+    if (idx === targetIndex) {
+      el.classList.add('app-active-line');
+    } else {
+      el.classList.remove('app-active-line');
+    }
+  });
+}
+
+function bindLineClickHandlers() {
+  var lineEls = document.querySelectorAll('#prompter-stage .line-container');
+  lineEls.forEach(function(el, idx) {
+    if (el.dataset.cursorBound) return;
+    el.dataset.cursorBound = "true";
+    el.addEventListener('click', function() {
+      jumpCursorToLine(idx);
+    });
+  });
+}
+
+function jumpCursorToLine(lineIdx) {
+  var lineEls = document.querySelectorAll('#prompter-stage .line-container');
+  if (!lineEls[lineIdx]) return;
+
+  if (activeSongName && loadedSongsMap[activeSongName]) {
+    var stats = analyzeSongBeatsAndLines(loadedSongsMap[activeSongName]);
+    var bpm = parseFloat(document.getElementById('metro-bpm').value) || 90;
+    var milestones = getLineBeatMilestones(lineEls, stats.beats);
+    var startBeat = lineIdx === 0 ? 0 : milestones[lineIdx - 1];
+    appElapsedSeconds = (startBeat / bpm) * 60;
+  }
+
+  var viewport = document.getElementById('viewport');
+  var cursorLine = document.getElementById('reading-cursor-line');
+  var readY = cursorLine
+    ? cursorLine.getBoundingClientRect().top
+    : viewport.getBoundingClientRect().top + (viewport.clientHeight * 0.32);
+  var lineRect = lineEls[lineIdx].getBoundingClientRect();
+  var lineCenter = lineRect.top + (lineRect.height / 2);
+
+  // Jump immediately and update exactPositionTracker so continuous scrolling never stalls
+  viewport.scrollTop += (lineCenter - readY);
+  exactPositionTracker = viewport.scrollTop;
+  lastFrameTimestamp = performance.now();
+
+  updateAppCursorPosition();
+}
+
+function syncCursorToViewport() {
+  var viewport = document.getElementById('viewport');
+  var cursorLine = document.getElementById('reading-cursor-line');
+  var lineEls = document.querySelectorAll('#prompter-stage .line-container');
+  if (!lineEls.length) return;
+
+  var readY = cursorLine
+    ? cursorLine.getBoundingClientRect().top
+    : viewport.getBoundingClientRect().top + (viewport.clientHeight * 0.32);
+
+  var closestIdx = 0;
+  var closestDist = Infinity;
+  lineEls.forEach(function(el, idx) {
+    var rect = el.getBoundingClientRect();
+    var dist = Math.abs((rect.top + rect.height / 2) - readY);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestIdx = idx;
+    }
+  });
+
+  if (activeSongName && loadedSongsMap[activeSongName]) {
+    var stats = analyzeSongBeatsAndLines(loadedSongsMap[activeSongName]);
+    var bpm = parseFloat(document.getElementById('metro-bpm').value) || 90;
+    var milestones = getLineBeatMilestones(lineEls, stats.beats);
+    var startBeat = closestIdx === 0 ? 0 : milestones[closestIdx - 1];
+    appElapsedSeconds = (startBeat / bpm) * 60;
+  }
+
+  updateAppCursorPosition();
+}
+
+function updateReadingCursorSettings() {
+  var showEl = document.getElementById('opt-show-cursor');
+  var posEl = document.getElementById('opt-cursor-pos');
+  var labelEl = document.getElementById('cursor-pos-label');
+  var cursorLine = document.getElementById('reading-cursor-line');
+
+  var isVisible = showEl ? showEl.checked : true;
+  var pct = posEl ? posEl.value : 32;
+
+  if (labelEl) labelEl.innerText = pct + "%";
+  if (cursorLine) {
+    cursorLine.style.display = isVisible ? "block" : "none";
+    cursorLine.style.top = pct + "%";
+  }
+
+  if (!isVisible) {
+    document.querySelectorAll('.app-active-line').forEach(function(el) {
+      el.classList.remove('app-active-line');
+    });
+  } else {
+    updateAppCursorPosition();
+  }
+}
+
 
 function analyzeSongBeatsAndLines(rawText) {
   var lines = rawText.split(/\r?\n/).map(function(ln) { return ln.trim(); });
@@ -80,23 +322,9 @@ function analyzeSongBeatsAndLines(rawText) {
   var totalChordBeats = 0;
   var totalContentLines = 0;
   var lastLineBeats = 0;
-  var inTabBlock = false;
 
   mergedLines.forEach(function(ln) {
     if (!ln) return;
-
-    var lowerLn = ln.toLowerCase();
-    if (lowerLn.startsWith("{tab:") || lowerLn === "{tab}") {
-      inTabBlock = true;
-      return;
-    }
-    if (lowerLn === "{endtab}") {
-      inTabBlock = false;
-      return;
-    }
-    if (inTabBlock || lowerLn.startsWith("{tabpick:")) {
-      return;
-    }
 
     // Check for standalone {Repeat: n} directive on its own line
     var standaloneRepeatMatch = ln.match(/^\{repeat\s*:\s*(\d+)\s*\}$/i);

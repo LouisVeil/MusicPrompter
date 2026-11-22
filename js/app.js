@@ -233,6 +233,10 @@ function selectSong(songName) {
   } else {
     document.getElementById('scroll-speed').value = getManualSongScrollSpeed(rawMarkupText);
   }
+  if (typeof appElapsedSeconds !== 'undefined') appElapsedSeconds = 0;
+  if (typeof alignCursorToFirstLine === 'function') alignCursorToFirstLine();
+  if (typeof bindLineClickHandlers === 'function') bindLineClickHandlers();
+  if (typeof updateAppCursorPosition === 'function') updateAppCursorPosition();
 }
 
 function applyTempoToCurrentSong() {
